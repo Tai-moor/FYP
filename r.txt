@@ -1,0 +1,2 @@
+PS D:\Semester 7\project\git\medical-chatbot> .\venv\Scripts\activate
+(venv) PS D:\Semester 7\project\git\medical-chatbot> streamlit run medibot.py
