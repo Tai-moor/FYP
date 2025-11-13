@@ -17,7 +17,8 @@ load_dotenv(find_dotenv())
 
 # --- Configuration ---
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-AGENT_MODEL = "llama-3.3-70b-versatile" # The "smart" brain for ALL tasks
+# We use the 8b model for EVERYTHING to avoid rate limits
+AGENT_MODEL = "llama-3.1-8b-instant" 
 DB_FAISS_PATH = "vectorstore/db_faiss"
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 DOCTORS_CSV_PATH = "data/doctors.csv"
@@ -27,10 +28,9 @@ DOCTORS_CSV_PATH = "data/doctors.csv"
 @tool
 def find_a_doctor(specialty: str, city: str) -> str:
     """
-    Use this tool **if and only if** the user wants to find a doctor, clinic, or hospital.
+    Use this tool **if and only if** the user wants to find a doctor.
     This tool **REQUIRES** two arguments: `specialty` and `city`.
     If you don't have both from the `input` or `chat_history`, you **MUST** ask for the missing information.
-    **DO NOT** use this tool without both.
     """
     if not specialty or not city:
         return "I am sorry, but I need both a medical specialty and a city to find a doctor."
@@ -61,8 +61,7 @@ def find_a_doctor(specialty: str, city: str) -> str:
 @tool
 def check_symptoms(symptoms: str) -> str:
     """
-    Use this tool **if and only if** the user is describing their *own personal symptoms* (e.g., "I have a fever and cough", "my head hurts", "I feel sick").
-    The input is the user's symptom description as a string.
+    Use this tool **if and only if** the user is describing their *own personal symptoms* (e.g., "I have a fever and cough", "my head hurts").
     """
     print(f"[Debug Tool]: Running LLM check_symptoms with symptoms='{symptoms}'")
     
@@ -73,12 +72,12 @@ def check_symptoms(symptoms: str) -> str:
 "As an AI, I am not a medical professional. This is not a diagnosis. Please consult a real doctor for any health concerns."
 
 **YOUR TASK:**
-After the disclaimer, provide two things:
-1.  A bulleted list of *possible* associated medical conditions based on the user's symptoms.
-2.  A brief, concluding paragraph recommending the user see a doctor.
+After the disclaimer, you **MUST ONLY** provide a bulleted list of *possible* associated medical conditions based on the user's symptoms.
 
-**CRITICAL RULE:**
-- You **MUST NOT** define the symptoms themselves. For example, do not explain what a "fever" or "headache" is. Just list the possible conditions and then give the final recommendation.
+**CRITICAL RULES:**
+- **DO NOT** define the symptoms.
+- **DO NOT** add any extra concluding paragraphs or advice.
+- Your response **MUST** be *only* the disclaimer and the bulleted list.
 
 **User's Symptoms:** "{user_symptoms}"
 
@@ -138,27 +137,37 @@ def get_agent_executor():
     retriever_tool = Tool(
         name="medical_book_search",
         func=invoke_retriever_chain,
-        description="Use this tool **if and only if** the user is asking a *factual, definitional, or informational* question about a medical topic (e.g., 'What is dengue?', 'What are the symptoms of the flu?', 'Define paracetamol'). **DO NOT** use this if the user says 'I have...' (that's `check_symptoms`)."
+        description="Use this tool ONLY for factual questions about medicine (e.g., 'What is dengue?')."
     )
 
-    # --- **THIS IS THE FIX** ---
-    # We pass the tools directly. We do NOT re-define them here.
     tools = [retriever_tool, find_a_doctor, check_symptoms]
-    # ---------------------------
     
     # 3. Create the Agent Prompt
     
-    # --- **THIS IS THE CRITICAL PROMPT UPDATE** ---
-    # We are putting the guardrail at the end, not the beginning,
-    # and simplifying the logic.
-    SYSTEM_PROMPT = """You are Medibot, a professional AI medical assistant. Your goal is to be helpful by choosing the correct tool.
+    # --- **THIS IS THE FINAL, 10000% FIX** ---
+    # This prompt is a simple "router". It does not allow the 8b model
+    # to "think" or "summarize". It just forces it to pass the tool output.
+    SYSTEM_PROMPT = """You are a simple router. Your only job is to choose the correct tool.
 
-First, analyze the user's `input` and `chat_history` to understand their intent. Then, choose **one** of the following actions:
+**#1 MOST IMPORTANT RULE: PASS-THROUGH**
+After a tool provides an output, you **MUST** output that *exact* text.
+Do not summarize it. Do not change it. Do not add any text. Just pass the tool's output.
 
-1.  **Call `check_symptoms`:** If the user is describing their *own personal symptoms* (e.g., "I have a fever and cough", "my head hurts").
-2.  **Call `find_a_doctor`:** If the user wants to find a doctor. You **must** have both `specialty` and `city` from the `input` or `chat_history`. If you don't, ask for the missing information.
-3.  **Call `medical_book_search`:** If the user is asking a *factual or informational* question about a medical topic (e.g., "What is dengue?").
-4.  **Respond without a tool:** If the request is not medical (e.g., "who is Messi", "hi", "thanks"), you **MUST** respond with: "I am a medical assistant and can only answer medical-related questions. How can I help you with a medical query?"
+**YOUR TOOL-CHOICE RULES:**
+
+1.  **For User Symptoms (e.g., "I have a fever", "I feel sick"):**
+    * You **MUST** call the `check_symptoms` tool.
+
+2.  **For Finding a Doctor (e.g., "find a doctor in islamabad"):**
+    * You **MUST** call the `find_a_doctor` tool.
+    * (Check `chat_history` for `specialty` and `city`. If missing, you MUST ask for them.)
+
+3.  **For Factual Questions (e.g., "What is dengue?"):**
+    * You **MUST** call the `medical_book_search` tool.
+
+4.  **For Non-Medical queries (e.g., "hi", "who is Messi"):**
+    * You **MUST NOT** call any tool.
+    * Your ONLY response is: "I am a medical assistant and can only answer medical-related questions. How can I help you with a medical query?"
 """
     # -----------------------------------------------
 
