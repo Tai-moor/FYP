@@ -27,43 +27,26 @@ Embeddings: HuggingFace (sentence-transformers/all-MiniLM-L6-v2)
 
 Data Handling: Python csv and pypdf modules
 
-📂 Project Structure
-medical-chatbot/
-├── data/
-│   ├── doctors.csv          # Local database of doctors
-│   └── medical_book.pdf     # Source PDF for the RAG system
-├── vectorstore/
-│   └── db_faiss/            # The generated vector database (AI Memory)
-├── .env                     # API Keys (Not committed to Git)
-├── medibot.py               # Main Application (Streamlit + Agent Logic)
-├── create_memory_for_LLM.py # Script to ingest PDF and build Vector DB
-└── requirements.txt         # Project dependencies
-
 ⚙️ Setup & Installation
 1. Clone the Repository
-
-git clone <your-repo-link>
-cd medical-chatbot
 2. Create a Virtual Environment
 It is recommended to use a clean environment to avoid conflicts.
-
 # Windows
 python -m venv venv
 .\venv\Scripts\activate
-
 # Mac/Linux
 python3 -m venv venv
 source venv/bin/activate
-3. Install Dependencies
-Bash
 
+3. Install Dependencies
 pip install streamlit python-dotenv langchain langchain-google-genai langchain-community langchain-huggingface faiss-cpu sentence-transformers pypdf
-4. Configure API Keys
+
+5. Configure API Keys
 Create a .env file in the root directory and add your Google API key:
 
 Code snippet
 
-GOOGLE_API_KEY=AIzaSy...YourKeyHere
+GOOGLE_API_KEY=YourKeyHere
 🚀 Usage
 Step 1: Build the Memory (Run once)
 If you haven't created the vector database yet, run this script to process your PDF:
